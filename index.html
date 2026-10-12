@@ -136,12 +136,12 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px}
   <details class="card">
     <summary>Settings and how this works</summary>
     <label for="rpcInput" style="margin-top:12px">Solana RPC URL</label>
-    <input type="url" id="rpcInput" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <p class="muted">The public Solana endpoint is rate-limited. A free RPC from any provider is faster; it is stored only in this browser.</p>
+    <input type="url" id="rpcInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Automatic (free public endpoints)">
+    <p class="muted">Leave empty and the page tries free public endpoints until one answers. For steadier results paste a free RPC URL from any Solana provider. It's stored only in this browser; empty and Save goes back to automatic.</p>
     <div class="row"><button class="btn secondary small" id="rpcSave" type="button">Save RPC</button></div>
     <p class="notice">Checks use the desk's hard limits (thresholds.py): age 15 min to 72 h, liquidity ≥ $12,000, 24h volume ≥ $40,000,
       market cap $60k to $8M, ≥ 150 trades in 24h, no buy-only hour, top wallet ≤ 5% (Solana, pool and program accounts excluded),
-      top 10 ≤ 60%, ≥ 80 holders, no honeypot flag, Solana mint and freeze authority revoked.
+      top 10 ≤ 60%, ≥ 80 holders, no honeypot (GeckoTerminal's verdict, or on Solana the chain showing the token can't block a sale), Solana mint and freeze authority revoked.
       A fact nobody reported is UNKNOWN and never counts as a pass. Jev's judgement runs on the desk, not on this page.</p>
     <p class="notice">Data: DexScreener (prices, liquidity, trades), GeckoTerminal (holders, honeypot flag), Solana RPC (authorities,
       holders). Read-only: no keys, no signatures, no transactions.</p>
@@ -159,7 +159,11 @@ const CHAINS = {
   base:      {label: "Base",      dex: "base",      gt: "base"},
   robinhood: {label: "Robinhood", dex: "robinhood", gt: "robinhood"},   // DexScreener id unconfirmed
 };
-const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
+// Free endpoints tried in order until one answers. The Solana Foundation's own public endpoint refuses web pages
+// (HTTP 403), so it is last. A URL saved in Settings is always tried first.
+const RPC_FALLBACKS = ["https://solana-rpc.publicnode.com", "https://solana.drpc.org",
+                       "https://api.mainnet.solana.com", "https://api.mainnet-beta.solana.com"];
+let lastRpcHost = null;
 const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const RISKY_EXT = new Set(["transferFeeConfig","permanentDelegate","transferHook","nonTransferable","defaultAccountState","pausableConfig"]);
@@ -185,9 +189,9 @@ function usd(v) {
 function pct(v, d = 1) { return v === null ? "unknown" : v.toFixed(d) + "%"; }
 const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/, EVM_RE = /^0x[0-9a-fA-F]{40}$/;
 
-async function getJSON(url, opts = {}) {
+async function getJSON(url, opts = {}, timeoutMs = 15000) {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 15000);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const r = await fetch(url, {...opts, signal: ctl.signal, headers: {Accept: "application/json", ...(opts.headers || {})}});
     if (r.status === 404) return {ok: true, data: null, status: 404};
@@ -221,12 +225,23 @@ function onCurve(address) {             // true = wallet key, false = program-de
   const x2 = u * modpow(v, P - 2n, P) % P;
   return x2 === 0n || modpow(x2, (P - 1n) / 2n, P) === 1n;
 }
-function rpcUrl() { return store.get("rpc") || DEFAULT_RPC; }
+function rpcList() {
+  const seen = new Set();
+  return [store.get("rpc"), store.get("rpc_ok"), ...RPC_FALLBACKS].filter(u => u && !seen.has(u) && seen.add(u));
+}
 async function rpc(method, params) {
-  const r = await getJSON(rpcUrl(), {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({jsonrpc: "2.0", id: 1, method, params})});
-  if (!r.ok || !r.data || r.data.error || !("result" in r.data)) return {ok: false, why: r.why || "RPC error"};
-  return {ok: true, result: r.data.result};
+  let why = "no Solana endpoint answered";
+  for (const url of rpcList()) {
+    const r = await getJSON(url, {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({jsonrpc: "2.0", id: 1, method, params})}, 8000);
+    if (r.ok && r.data && !r.data.error && "result" in r.data) {
+      if (url !== store.get("rpc")) store.set("rpc_ok", url);      // start with the one that worked next time
+      lastRpcHost = new URL(url).host;
+      return {ok: true, result: r.data.result};
+    }
+    why = r.ok ? "error from " + new URL(url).host : r.why + " from " + new URL(url).host;
+  }
+  return {ok: false, why};
 }
 async function solanaFacts(mint) {
   const out = {mintRevoked: null, freezeRevoked: null, risky: null, sellBlock: null, topWallet: null, topProgram: null, why: null};
@@ -290,9 +305,17 @@ function evaluate(chain, pair, gt, sol) {
   c.push(check("Sells last hour", b1 === null || s1 === null ? null : {b1, s1}, v => v.s1 === 0 && v.b1 > 20,
     v => v.b1 + " buys, " + v.s1 + " sells", v => v.b1 + " buys and no sells: possible honeypot", "trade counts not reported"));
 
+  // Honeypot: GeckoTerminal's verdict, or on Solana the chain's own evidence (the desk's rule): with the freeze
+  // authority revoked and no transfer hook, fee or delegate, the token program cannot stop a sale.
   const hp = gt ? gt.honeypot : null;
-  c.push(check("Honeypot flag", hp === true || hp === false ? hp : null, v => v === true, () => "not flagged", () => "flagged as a honeypot",
-    gt && gt.found ? "GeckoTerminal says " + (hp === "unknown" ? "unknown" : "nothing") : "no GeckoTerminal data"));
+  const chainSays = chain === "solana" && sol ? sol.sellBlock : null;
+  let hpVal = null, hpOk = () => "not flagged by GeckoTerminal", hpFail = () => "flagged as a honeypot";
+  if (hp === true || hp === false) hpVal = hp;
+  else if (chainSays === false) { hpVal = false; hpOk = () => "no GeckoTerminal verdict, but the chain shows the token can't block a sale"; }
+  else if (chainSays === true) { hpVal = true; hpFail = () => "the token program can block, tax or seize transfers"; }
+  c.push(check("Honeypot", hpVal, v => v === true, hpOk, hpFail,
+    chain === "solana" ? "no GeckoTerminal verdict and the chain facts didn't load"
+                       : (gt && gt.found ? "GeckoTerminal says " + (hp === "unknown" ? "unknown" : "nothing") : "no GeckoTerminal data")));
   const holders = gt ? gt.holders : null;
   c.push(check("Holders", holders, v => v < HARD.min_holders, v => v.toLocaleString() + " holders", v => v + " holders, under " + HARD.min_holders, "not reported"));
   const top10 = gt ? gt.top10 : null;
@@ -356,6 +379,7 @@ async function analyze() {
     if (!a) notes.push("GeckoTerminal hasn't indexed this token yet");
   } else notes.push("GeckoTerminal " + gtr.why);
   if (sol && sol.why) notes.push(sol.why);
+  else if (sol && lastRpcHost) notes.push("Solana data from " + lastRpcHost);
   current = {addr, chain, pair};
   render(addr, pair, evaluate(chain, pair, gt, sol), notes);
   $("analyzeBtn").disabled = false;
@@ -477,10 +501,11 @@ $("walletBtn").addEventListener("click", () => {
 });
 $("watchBtn").addEventListener("click", watchAddress);
 $("walletForget").addEventListener("click", forgetWallet);
-$("rpcInput").value = store.get("rpc") || DEFAULT_RPC;
+$("rpcInput").value = store.get("rpc") || "";
 $("rpcSave").addEventListener("click", () => {
   const v = $("rpcInput").value.trim();
-  if (/^https:\/\//.test(v)) { store.set("rpc", v); $("status").textContent = "RPC saved in this browser."; }
+  if (!v) { store.del("rpc"); $("status").textContent = "Using the automatic public endpoints."; }
+  else if (/^https:\/\//.test(v)) { store.set("rpc", v); $("status").textContent = "RPC saved in this browser."; }
   else $("status").textContent = "The RPC URL must start with https://";
 });
 setChain(chain);

@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="referrer" content="no-referrer">
+<title>Desk Scanner</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111827'/%3E%3Cpath d='M8 21l6-6 4 4 6-8' stroke='%2334d399' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#0f172a; --muted:#5b6474; --line:#e3e6eb; --accent:#0f766e; --accent-ink:#ffffff;
+  --pass:#047857; --pass-bg:#d1fae5; --fail:#b42318; --fail-bg:#fee4e2; --unk:#92400e; --unk-bg:#fef3c7;
+  --chip:#eef1f4; --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0f14; --card:#131a22; --ink:#e7edf3; --muted:#93a1b0; --line:#243040; --accent:#2dd4bf; --accent-ink:#04211e;
+    --pass:#6ee7b7; --pass-bg:#063b2c; --fail:#fda29b; --fail-bg:#4a1512; --unk:#fcd34d; --unk-bg:#3d2c06;
+    --chip:#1b2430; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f14; --card:#131a22; --ink:#e7edf3; --muted:#93a1b0; --line:#243040; --accent:#2dd4bf; --accent-ink:#04211e;
+  --pass:#6ee7b7; --pass-bg:#063b2c; --fail:#fda29b; --fail-bg:#4a1512; --unk:#fcd34d; --unk-bg:#3d2c06;
+  --chip:#1b2430; --shadow:none;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  padding:env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px)}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 8px}
+h1{font-size:20px;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0;box-shadow:var(--shadow)}
+label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+input[type=text],input[type=url]{width:100%;font:inherit;font-size:16px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink);min-width:0}
+input:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
+.seg button{font:inherit;font-size:14px;padding:10px 4px;border-radius:10px;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:inherit;font-weight:600;font-size:16px;padding:12px 16px;
+  border-radius:12px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);text-decoration:none;cursor:pointer;min-height:44px}
+.btn.secondary{background:var(--chip);color:var(--ink);border-color:var(--line)}
+.btn.small{font-size:14px;padding:8px 12px;min-height:36px}
+.btn[disabled]{opacity:.55}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row > .btn{flex:1 1 140px}
+.muted{color:var(--muted);font-size:13px}
+.verdict{border-radius:12px;padding:12px 14px;font-weight:600;margin:4px 0 12px}
+.verdict.pass{background:var(--pass-bg);color:var(--pass)} .verdict.fail{background:var(--fail-bg);color:var(--fail)}
+.verdict.unk{background:var(--unk-bg);color:var(--unk)}
+.verdict span{display:block;font-weight:400;font-size:13px;margin-top:2px}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 12px}
+.fact{background:var(--chip);border-radius:10px;padding:8px 10px;min-width:0}
+.fact b{display:block;font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fact i{font-style:normal;font-size:12px;color:var(--muted)}
+ul.checks{list-style:none;margin:0;padding:0}
+ul.checks li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+ul.checks li:first-child{border-top:0}
+.chip{font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:999px;min-width:58px;text-align:center}
+.chip.pass{background:var(--pass-bg);color:var(--pass)} .chip.fail{background:var(--fail-bg);color:var(--fail)}
+.chip.unk{background:var(--unk-bg);color:var(--unk)}
+.check-name{font-weight:600;font-size:14px} .check-why{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.tokenhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.tokenhead h2{margin:0;font-size:18px;overflow-wrap:anywhere}
+.addr{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);overflow-wrap:anywhere}
+.status{font-size:13px;color:var(--muted);min-height:18px}
+.wallet-pill{max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details summary{cursor:pointer;color:var(--muted);font-size:14px}
+.hidden{display:none !important}
+.notice{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding-left:10px;margin:8px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Desk Scanner<small>read-only token checks · trades happen in FOMO</small></h1>
+    <button id="walletBtn" class="btn small wallet-pill" type="button">Connect wallet</button>
+  </header>
+
+  <section class="card hidden" id="walletCard" aria-live="polite">
+    <div id="walletConnected" class="hidden">
+      <label>Wallet (read-only)</label>
+      <div class="addr" id="walletAddr"></div>
+      <div class="facts" style="margin-top:10px">
+        <div class="fact"><i>Network</i><b id="walletNet">-</b></div>
+        <div class="fact"><i>Balance</i><b id="walletBal">-</b></div>
+      </div>
+      <div class="row"><button class="btn secondary small" id="walletForget" type="button">Disconnect</button></div>
+    </div>
+    <div id="walletChooser" class="hidden">
+      <p class="notice" style="margin-top:0">Safari has no wallet built in. Open this page inside your wallet app, or just watch an address. This page never asks for a key and never sends a transaction.</p>
+      <div class="row">
+        <a class="btn" id="openPhantom" href="#" rel="noopener">Open in Phantom</a>
+      </div>
+      <p class="muted">MetaMask or another wallet: open its in-app browser and visit this page there.</p>
+      <label for="watchInput" style="margin-top:12px">Watch an address (your FOMO wallet address works: it's public)</label>
+      <div class="row">
+        <input type="text" id="watchInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Solana or 0x address">
+        <button class="btn secondary" id="watchBtn" type="button">Watch</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <label for="tokenInput">Token address (or a DexScreener / GeckoTerminal link)</label>
+    <input type="text" id="tokenInput" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"
+           placeholder="Paste an address">
+    <div class="seg" role="group" aria-label="Chain">
+      <button type="button" data-chain="solana" aria-pressed="true">Solana</button>
+      <button type="button" data-chain="bsc" aria-pressed="false">BSC</button>
+      <button type="button" data-chain="base" aria-pressed="false">Base</button>
+      <button type="button" data-chain="robinhood" aria-pressed="false">Robinhood</button>
+    </div>
+    <button class="btn" id="analyzeBtn" type="button" style="width:100%">Check token</button>
+    <div class="status" id="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card hidden" id="result" aria-live="polite">
+    <div class="tokenhead"><h2 id="tName"></h2><span class="muted" id="tChain"></span></div>
+    <div class="addr" id="tAddr"></div>
+    <div class="verdict" id="verdict" style="margin-top:12px"></div>
+    <div class="facts" id="facts"></div>
+    <ul class="checks" id="checks"></ul>
+    <div class="row" style="margin-top:12px">
+      <a class="btn" id="fomoBtn" href="https://fomo.family" target="_blank" rel="noopener noreferrer">Copy address &amp; open FOMO</a>
+      <a class="btn secondary" id="dexLink" href="#" target="_blank" rel="noopener noreferrer">Chart</a>
+    </div>
+    <p class="muted" id="fomoNote">FOMO has no public trading link, so the address is copied for you: paste it into FOMO's search and confirm the trade there.</p>
+  </section>
+
+  <details class="card">
+    <summary>Settings and how this works</summary>
+    <label for="rpcInput" style="margin-top:12px">Solana RPC URL</label>
+    <input type="url" id="rpcInput" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <p class="muted">The public Solana endpoint is rate-limited. A free RPC from any provider is faster; it is stored only in this browser.</p>
+    <div class="row"><button class="btn secondary small" id="rpcSave" type="button">Save RPC</button></div>
+    <p class="notice">Checks use the desk's hard limits (thresholds.py): age 15 min to 72 h, liquidity ≥ $12,000, 24h volume ≥ $40,000,
+      market cap $60k to $8M, ≥ 150 trades in 24h, no buy-only hour, top wallet ≤ 5% (Solana, pool and program accounts excluded),
+      top 10 ≤ 60%, ≥ 80 holders, no honeypot flag, Solana mint and freeze authority revoked.
+      A fact nobody reported is UNKNOWN and never counts as a pass. Jev's judgement runs on the desk, not on this page.</p>
+    <p class="notice">Data: DexScreener (prices, liquidity, trades), GeckoTerminal (holders, honeypot flag), Solana RPC (authorities,
+      holders). Read-only: no keys, no signatures, no transactions.</p>
+  </details>
+</div>
+
+<script>
+"use strict";
+// ---------- limits: the desk's thresholds.py, HARD ----------
+const HARD = {min_age_minutes: 15, max_age_hours: 72, min_liquidity_usd: 12000, min_volume_h24: 40000,
+  min_mcap_usd: 60000, max_mcap_usd: 8000000, min_trades_h24: 150, max_top_wallet: 0.05, max_top_10: 0.60, min_holders: 80};
+const CHAINS = {
+  solana:    {label: "Solana",    dex: "solana",    gt: "solana"},
+  bsc:       {label: "BSC",       dex: "bsc",       gt: "bsc"},
+  base:      {label: "Base",      dex: "base",      gt: "base"},
+  robinhood: {label: "Robinhood", dex: "robinhood", gt: "robinhood"},   // DexScreener id unconfirmed
+};
+const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
+const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+const RISKY_EXT = new Set(["transferFeeConfig","permanentDelegate","transferHook","nonTransferable","defaultAccountState","pausableConfig"]);
+
+// ---------- small helpers ----------
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode: fine */ } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* fine */ } },
+};
+function num(v) {
+  if (v === null || v === undefined || typeof v === "boolean") return null;
+  const f = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(f) ? f : null;
+}
+function usd(v) {
+  if (v === null) return "unknown";
+  if (Math.abs(v) >= 1e6) return "$" + (v / 1e6).toFixed(2) + "M";
+  if (Math.abs(v) >= 1e3) return "$" + (v / 1e3).toFixed(1) + "k";
+  return "$" + (Math.abs(v) >= 1 ? v.toFixed(2) : v.toPrecision(3));
+}
+function pct(v, d = 1) { return v === null ? "unknown" : v.toFixed(d) + "%"; }
+const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/, EVM_RE = /^0x[0-9a-fA-F]{40}$/;
+
+async function getJSON(url, opts = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch(url, {...opts, signal: ctl.signal, headers: {Accept: "application/json", ...(opts.headers || {})}});
+    if (r.status === 404) return {ok: true, data: null, status: 404};
+    if (!r.ok) return {ok: false, why: r.status === 429 ? "rate limited, try again in a minute" : "HTTP " + r.status};
+    return {ok: true, data: await r.json(), status: r.status};
+  } catch (e) {
+    return {ok: false, why: e.name === "AbortError" ? "timed out" : "could not be reached from this browser"};
+  } finally { clearTimeout(timer); }
+}
+
+// ---------- Solana: base58 + is an address a real wallet (on the ed25519 curve) ----------
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58decode(s) {
+  let n = 0n;
+  for (const ch of s) { const i = B58.indexOf(ch); if (i < 0) return null; n = n * 58n + BigInt(i); }
+  const bytes = [];
+  while (n > 0n) { bytes.unshift(Number(n & 255n)); n >>= 8n; }
+  for (const ch of s) { if (ch === "1") bytes.unshift(0); else break; }
+  return Uint8Array.from(bytes);
+}
+const P = (1n << 255n) - 19n;
+function modpow(b, e, m) { let r = 1n; b %= m; if (b < 0n) b += m; while (e > 0n) { if (e & 1n) r = r * b % m; b = b * b % m; e >>= 1n; } return r; }
+const D = ((-121665n % P + P) % P) * modpow(121666n, P - 2n, P) % P;
+function onCurve(address) {             // true = wallet key, false = program-derived (pool, curve, multisig)
+  const raw = b58decode(address);
+  if (!raw || raw.length !== 32) return null;
+  let y = 0n;
+  for (let i = 31; i >= 0; i--) y = (y << 8n) | BigInt(raw[i]);
+  y &= (1n << 255n) - 1n; y %= P;
+  const u = (y * y - 1n + P) % P, v = (D * y * y + 1n) % P;
+  const x2 = u * modpow(v, P - 2n, P) % P;
+  return x2 === 0n || modpow(x2, (P - 1n) / 2n, P) === 1n;
+}
+function rpcUrl() { return store.get("rpc") || DEFAULT_RPC; }
+async function rpc(method, params) {
+  const r = await getJSON(rpcUrl(), {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({jsonrpc: "2.0", id: 1, method, params})});
+  if (!r.ok || !r.data || r.data.error || !("result" in r.data)) return {ok: false, why: r.why || "RPC error"};
+  return {ok: true, result: r.data.result};
+}
+async function solanaFacts(mint) {
+  const out = {mintRevoked: null, freezeRevoked: null, risky: null, sellBlock: null, topWallet: null, topProgram: null, why: null};
+  const info = await rpc("getAccountInfo", [mint, {encoding: "jsonParsed"}]);
+  if (!info.ok) { out.why = "Solana RPC " + info.why; return out; }
+  const value = info.result && info.result.value;
+  const parsed = value && value.data && value.data.parsed;
+  const m = parsed && parsed.type === "mint" ? parsed.info : null;
+  if (!m || ![SPL_TOKEN, TOKEN_2022].includes(value.owner)) { out.why = "not a token mint"; return out; }
+  if ("mintAuthority" in m) out.mintRevoked = m.mintAuthority === null;
+  if ("freezeAuthority" in m) out.freezeRevoked = m.freezeAuthority === null;
+  if (Array.isArray(m.extensions)) out.risky = m.extensions.map(e => e && e.extension).filter(x => RISKY_EXT.has(x));
+  else if (value.owner === SPL_TOKEN) out.risky = [];
+  out.sellBlock = out.freezeRevoked === false || (out.risky && out.risky.length) ? true
+               : (out.freezeRevoked === true && out.risky && out.risky.length === 0 ? false : null);
+  const supply = num(m.supply);
+  if (!supply) return out;
+  const big = await rpc("getTokenLargestAccounts", [mint]);
+  const accts = big.ok && big.result && Array.isArray(big.result.value) ? big.result.value.filter(a => a && a.address && /^\d+$/.test(String(a.amount))) : [];
+  if (!accts.length) return out;
+  const owners = await rpc("getMultipleAccounts", [accts.map(a => a.address), {encoding: "jsonParsed"}]);
+  const vals = owners.ok && owners.result && Array.isArray(owners.result.value) ? owners.result.value : [];
+  const wallets = new Map(), programs = new Map(); let unknown = 0;
+  accts.forEach((a, i) => {
+    const amt = Number(a.amount);
+    const owner = vals[i] && vals[i].data && vals[i].data.parsed && vals[i].data.parsed.info && vals[i].data.parsed.info.owner;
+    const kind = typeof owner === "string" ? onCurve(owner) : null;
+    if (kind === true) wallets.set(owner, (wallets.get(owner) || 0) + amt);
+    else if (kind === false) programs.set(owner, (programs.get(owner) || 0) + amt);
+    else unknown = Math.max(unknown, amt);
+  });
+  if (programs.size) out.topProgram = 100 * Math.max(...programs.values()) / supply;
+  const bw = wallets.size ? Math.max(...wallets.values()) : null;
+  if (bw !== null && bw >= unknown) out.topWallet = 100 * bw / supply;
+  return out;
+}
+
+// ---------- the checks: PASS / FAIL / UNKNOWN, unknown never passes ----------
+function check(name, value, failIf, okText, failText, unknownText) {
+  if (value === null || value === undefined) return {name, state: "unk", why: unknownText};
+  return failIf(value) ? {name, state: "fail", why: failText(value)} : {name, state: "pass", why: okText(value)};
+}
+function evaluate(chain, pair, gt, sol) {
+  const c = [];
+  const ageMin = pair && num(pair.pairCreatedAt) ? (Date.now() - (pair.pairCreatedAt > 1e11 ? pair.pairCreatedAt : pair.pairCreatedAt * 1000)) / 60000 : null;
+  const age = ageMin !== null && ageMin >= -2 ? Math.max(0, ageMin) : null;
+  c.push(check("Age", age, v => v < HARD.min_age_minutes || v > HARD.max_age_hours * 60,
+    v => fmtAge(v), v => fmtAge(v) + (v < HARD.min_age_minutes ? ": too new, the data is noise" : ": no longer a launch"), "pair creation time not reported"));
+  const liq = pair ? num(pair.liquidity && pair.liquidity.usd) : null;
+  c.push(check("Liquidity", liq, v => v < HARD.min_liquidity_usd, v => usd(v), v => usd(v) + " is under " + usd(HARD.min_liquidity_usd), "not reported"));
+  const vol = pair ? num(pair.volume && pair.volume.h24) : null;
+  c.push(check("24h volume", vol, v => v < HARD.min_volume_h24, v => usd(v), v => usd(v) + " is under " + usd(HARD.min_volume_h24), "not reported"));
+  const mcap = pair ? num(pair.marketCap) : null;          // a market cap only; FDV never stands in
+  c.push(check("Market cap", mcap, v => v < HARD.min_mcap_usd || v > HARD.max_mcap_usd, v => usd(v),
+    v => usd(v) + " is outside " + usd(HARD.min_mcap_usd) + " to " + usd(HARD.max_mcap_usd), "not reported (FDV is not used in its place)"));
+  const tx = pair && pair.txns || {};
+  const h24b = num(tx.h24 && tx.h24.buys), h24s = num(tx.h24 && tx.h24.sells);
+  const trades = h24b !== null && h24s !== null ? h24b + h24s : null;
+  c.push(check("Trades 24h", trades, v => v < HARD.min_trades_h24, v => v + " trades", v => v + " trades, under " + HARD.min_trades_h24, "not reported"));
+  const b1 = num(tx.h1 && tx.h1.buys), s1 = num(tx.h1 && tx.h1.sells);
+  c.push(check("Sells last hour", b1 === null || s1 === null ? null : {b1, s1}, v => v.s1 === 0 && v.b1 > 20,
+    v => v.b1 + " buys, " + v.s1 + " sells", v => v.b1 + " buys and no sells: possible honeypot", "trade counts not reported"));
+
+  const hp = gt ? gt.honeypot : null;
+  c.push(check("Honeypot flag", hp === true || hp === false ? hp : null, v => v === true, () => "not flagged", () => "flagged as a honeypot",
+    gt && gt.found ? "GeckoTerminal says " + (hp === "unknown" ? "unknown" : "nothing") : "no GeckoTerminal data"));
+  const holders = gt ? gt.holders : null;
+  c.push(check("Holders", holders, v => v < HARD.min_holders, v => v.toLocaleString() + " holders", v => v + " holders, under " + HARD.min_holders, "not reported"));
+  const top10 = gt ? gt.top10 : null;
+  c.push(check("Top 10 holders", top10, v => v / 100 > HARD.max_top_10, v => pct(v), v => pct(v) + " is over " + HARD.max_top_10 * 100 + "%", "no distribution data"));
+
+  if (chain === "solana") {
+    const s = sol || {};
+    c.push(check("Mint authority", s.mintRevoked, v => v === false, () => "revoked (on chain)", () => "still set: supply can be inflated", s.why || "not reported"));
+    c.push(check("Freeze authority", s.freezeRevoked, v => v === false, () => "revoked (on chain)", () => "still set: balances can be frozen", s.why || "not reported"));
+    c.push(check("Token program", s.sellBlock, v => v === true, () => "cannot block, tax or seize transfers",
+      () => "can block, tax or seize transfers" + (s.risky && s.risky.length ? " (" + s.risky.join(", ") + ")" : ""), s.why || "extensions not reported"));
+    c.push(check("Top wallet", s.topWallet, v => v / 100 > HARD.max_top_wallet, v => pct(v, 2) + " (pool excluded" + (s.topProgram !== null ? ", pool holds " + pct(s.topProgram) : "") + ")",
+      v => pct(v, 2) + " in one wallet, over " + HARD.max_top_wallet * 100 + "%", s.why || "could not tell who holds the largest accounts"));
+  }
+  return c;
+}
+function fmtAge(m) { return m < 120 ? Math.round(m) + " min" : (m / 60).toFixed(1) + " h"; }
+
+// ---------- analyze ----------
+let chain = store.get("chain") || "solana";
+let current = null;
+function setChain(c) {
+  chain = c; store.set("chain", c);
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.chain === c)));
+}
+function extractAddress(text) {
+  const t = (text || "").trim();
+  const evm = t.match(/0x[0-9a-fA-F]{40}/);
+  if (evm) return {addr: evm[0], kind: "evm"};
+  const parts = t.split(/[\/?#&=\s]+/).filter(p => SOL_RE.test(p));
+  return parts.length ? {addr: parts[parts.length - 1], kind: "solana"} : null;
+}
+async function analyze() {
+  const found = extractAddress($("tokenInput").value);
+  if (!found) { $("status").textContent = "That doesn't look like a token address."; return; }
+  if (found.kind === "solana" && chain !== "solana") setChain("solana");
+  if (found.kind === "evm" && chain === "solana") setChain("bsc");
+  const addr = found.addr, c = CHAINS[chain];
+  $("analyzeBtn").disabled = true;
+  $("status").textContent = "Reading DexScreener, GeckoTerminal" + (chain === "solana" ? " and the Solana chain" : "") + "…";
+  const [dex, gtr, sol] = await Promise.all([
+    getJSON("https://api.dexscreener.com/tokens/v1/" + c.dex + "/" + addr),
+    getJSON("https://api.geckoterminal.com/api/v2/networks/" + c.gt + "/tokens/" + addr + "/info"),
+    chain === "solana" ? solanaFacts(addr) : Promise.resolve(null),
+  ]);
+  const notes = [];
+  let pair = null;
+  if (dex.ok && Array.isArray(dex.data)) {
+    const same = a => chain === "solana" ? a === addr : String(a).toLowerCase() === addr.toLowerCase();
+    const mine = dex.data.filter(p => p && p.baseToken && same(p.baseToken.address));
+    pair = mine.sort((a, b) => (num(b.liquidity && b.liquidity.usd) ?? -1) - (num(a.liquidity && a.liquidity.usd) ?? -1))[0] || null;
+    if (!pair) notes.push("DexScreener lists no pair for this token on " + c.label);
+  } else notes.push("DexScreener " + (dex.why || "returned nothing"));
+  let gt = null;
+  if (gtr.ok) {
+    const a = gtr.data && gtr.data.data && gtr.data.data.attributes;
+    const h = a && a.holders || {};
+    const hpRaw = a ? a.is_honeypot : null;
+    gt = {found: !!a, holders: num(h.count), top10: num(h.distribution_percentage && h.distribution_percentage.top_10),
+          honeypot: hpRaw === true || hpRaw === false ? hpRaw : (hpRaw == null ? null : ({yes: true, no: false, true: true, false: false}[String(hpRaw).toLowerCase()] ?? "unknown"))};
+    if (!a) notes.push("GeckoTerminal hasn't indexed this token yet");
+  } else notes.push("GeckoTerminal " + gtr.why);
+  if (sol && sol.why) notes.push(sol.why);
+  current = {addr, chain, pair};
+  render(addr, pair, evaluate(chain, pair, gt, sol), notes);
+  $("analyzeBtn").disabled = false;
+  $("status").textContent = notes.join(" · ");
+}
+function render(addr, pair, checks, notes) {
+  $("result").classList.remove("hidden");
+  const name = pair && pair.baseToken ? [pair.baseToken.symbol, pair.baseToken.name].filter(Boolean).join(" · ") : "Unknown token";
+  $("tName").textContent = name.slice(0, 60);               // deployer-written: shown as plain text only
+  $("tChain").textContent = CHAINS[chain].label;
+  $("tAddr").textContent = addr;
+  const fails = checks.filter(x => x.state === "fail"), unks = checks.filter(x => x.state === "unk");
+  const v = $("verdict");
+  v.className = "verdict " + (fails.length ? "fail" : unks.length ? "unk" : "pass");
+  v.textContent = fails.length ? "Cut: " + fails[0].name.toLowerCase() : unks.length ? "Can't clear: " + unks.length + " fact" + (unks.length > 1 ? "s" : "") + " unknown" : "Clears the hard checks";
+  const sub = document.createElement("span");
+  sub.textContent = fails.length ? fails[0].why : unks.length ? "Unknown is never a pass: " + unks.map(u => u.name.toLowerCase()).join(", ") : "Jev's judgement still runs on the desk before any order.";
+  v.appendChild(sub);
+  const facts = $("facts"); facts.textContent = "";
+  const price = pair ? num(pair.priceUsd) : null;
+  const ch = pair && pair.priceChange ? num(pair.priceChange.h1) : null;
+  [["Price", price === null ? "unknown" : "$" + (price >= 1 ? price.toFixed(4) : price.toPrecision(4))],
+   ["1h change", ch === null ? "unknown" : (ch > 0 ? "+" : "") + ch.toFixed(1) + "%"],
+   ["Liquidity", usd(pair ? num(pair.liquidity && pair.liquidity.usd) : null)],
+   ["Market cap", usd(pair ? num(pair.marketCap) : null)]].forEach(([k, val]) => {
+    const d = document.createElement("div"); d.className = "fact";
+    const i = document.createElement("i"); i.textContent = k; const b = document.createElement("b"); b.textContent = val;
+    d.append(i, b); facts.appendChild(d);
+  });
+  const ul = $("checks"); ul.textContent = "";
+  for (const x of checks) {
+    const li = document.createElement("li");
+    const chip = document.createElement("span"); chip.className = "chip " + x.state;
+    chip.textContent = x.state === "pass" ? "PASS" : x.state === "fail" ? "FAIL" : "UNKNOWN";
+    const body = document.createElement("div");
+    const n = document.createElement("div"); n.className = "check-name"; n.textContent = x.name;
+    const w = document.createElement("div"); w.className = "check-why"; w.textContent = x.why;
+    body.append(n, w); li.append(chip, body); ul.appendChild(li);
+  }
+  const dl = $("dexLink");
+  if (pair && typeof pair.url === "string" && /^https:\/\/dexscreener\.com\//.test(pair.url)) { dl.href = pair.url; dl.classList.remove("hidden"); }
+  else dl.classList.add("hidden");
+}
+
+// ---------- hand-off to FOMO: copy the address, open FOMO. The trade is confirmed there. ----------
+// The link itself opens FOMO (a real link, so Safari never blocks it as a pop-up); the copy starts in the same tap.
+function openFomo() {
+  if (!current) return;
+  const done = ok => { $("fomoNote").textContent = ok
+    ? "Address copied. Paste it into FOMO's search and confirm the trade there."
+    : "Couldn't copy automatically. Long-press the address above to copy it, then search it in FOMO."; };
+  try { navigator.clipboard.writeText(current.addr).then(() => done(true), () => done(false)); } catch (e) { done(false); }
+}
+
+// ---------- wallet: read-only. connect = see the address and balance. Never a signature. ----------
+function short(a) { return a.length > 14 ? a.slice(0, 6) + "…" + a.slice(-4) : a; }
+async function solBalance(addr) {
+  const r = await rpc("getBalance", [addr]);
+  const lamports = r.ok && r.result ? num(r.result.value) : null;
+  return lamports === null ? "unknown" : (lamports / 1e9).toFixed(4) + " SOL";
+}
+async function showWallet(addr, net, balance) {
+  store.set("wallet", JSON.stringify({addr, net}));
+  $("walletCard").classList.remove("hidden");
+  $("walletChooser").classList.add("hidden");
+  $("walletConnected").classList.remove("hidden");
+  $("walletAddr").textContent = addr; $("walletNet").textContent = net;
+  $("walletBal").textContent = "…";
+  $("walletBtn").textContent = short(addr);
+  $("walletBal").textContent = balance ? await balance() : "open your wallet app to see it";
+}
+async function connectWallet() {
+  const sol = (window.phantom && window.phantom.solana) || (window.solana && window.solana.isPhantom ? window.solana : null);
+  try {
+    if (sol) {
+      const r = await sol.connect();
+      const addr = r && r.publicKey ? r.publicKey.toString() : null;
+      if (addr) return showWallet(addr, "Solana", () => solBalance(addr));
+    } else if (window.ethereum && window.ethereum.request) {
+      const [addr] = await window.ethereum.request({method: "eth_requestAccounts"});
+      if (addr) return showWallet(addr, "EVM", async () => {
+        const wei = await window.ethereum.request({method: "eth_getBalance", params: [addr, "latest"]});
+        const v = num(parseInt(wei, 16)); return v === null ? "unknown" : (v / 1e18).toFixed(5) + " (native)";
+      });
+    }
+  } catch (e) {
+    $("status").textContent = "The wallet didn't connect (" + (e && e.message ? e.message.slice(0, 80) : "declined") + ").";
+    return;
+  }
+  // plain Safari: no wallet in the page. Offer the documented Phantom browse link, or watch-only.
+  const here = location.href.split("#")[0];
+  $("openPhantom").href = "https://phantom.com/ul/browse/" + encodeURIComponent(here) + "?ref=" + encodeURIComponent(here);
+  $("walletCard").classList.remove("hidden");
+  $("walletConnected").classList.add("hidden");
+  $("walletChooser").classList.remove("hidden");
+}
+function watchAddress() {
+  const a = ($("watchInput").value || "").trim();
+  if (SOL_RE.test(a)) return showWallet(a, "Solana (watch)", () => solBalance(a));
+  if (EVM_RE.test(a)) return showWallet(a, "EVM (watch)", null);
+  $("status").textContent = "That isn't a Solana or 0x address.";
+}
+function forgetWallet() {
+  store.del("wallet");
+  const sol = (window.phantom && window.phantom.solana) || null;
+  if (sol && sol.disconnect) { try { sol.disconnect(); } catch (e) { /* fine */ } }
+  $("walletCard").classList.add("hidden"); $("walletBtn").textContent = "Connect wallet";
+}
+
+// ---------- wiring ----------
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => setChain(b.dataset.chain)));
+$("analyzeBtn").addEventListener("click", analyze);
+$("tokenInput").addEventListener("keydown", e => { if (e.key === "Enter") analyze(); });
+$("fomoBtn").addEventListener("click", openFomo);
+$("walletBtn").addEventListener("click", () => {
+  const card = $("walletCard");
+  if (!card.classList.contains("hidden") && !$("walletChooser").classList.contains("hidden")) { card.classList.add("hidden"); return; }
+  connectWallet();
+});
+$("watchBtn").addEventListener("click", watchAddress);
+$("walletForget").addEventListener("click", forgetWallet);
+$("rpcInput").value = store.get("rpc") || DEFAULT_RPC;
+$("rpcSave").addEventListener("click", () => {
+  const v = $("rpcInput").value.trim();
+  if (/^https:\/\//.test(v)) { store.set("rpc", v); $("status").textContent = "RPC saved in this browser."; }
+  else $("status").textContent = "The RPC URL must start with https://";
+});
+setChain(chain);
+try {
+  const saved = JSON.parse(store.get("wallet") || "null");
+  if (saved && typeof saved.addr === "string" && (SOL_RE.test(saved.addr) || EVM_RE.test(saved.addr))) {
+    showWallet(saved.addr, saved.net, saved.net.startsWith("Solana") ? () => solBalance(saved.addr) : null);
+  }
+} catch (e) { /* nothing saved */ }
+const q = new URLSearchParams(location.search).get("token");
+if (q) { $("tokenInput").value = q; analyze(); }
+</script>
+</body>
+</html>
